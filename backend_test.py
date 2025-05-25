@@ -238,7 +238,7 @@ class DDNoteAPITester:
         """Test creating a structured session with comprehensive data"""
         structured_data = {
             "session_number": 5,
-            "session_date": "2024-02-15",
+            "session_date": "2024-02-15",  # Use string format for date
             "players_present": ["Alice", "Bob", "Charlie", "Diana"],
             "session_goal": "Infiltrate the goblin stronghold and rescue the captured villagers",
             "combat_encounters": [

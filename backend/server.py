@@ -9,7 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime
+from datetime import datetime, date
 import secrets
 import re
 
@@ -42,7 +42,79 @@ def authenticate(credentials: HTTPBasicCredentials = Depends(security)):
         )
     return credentials.username
 
-# Pydantic Models
+# Enhanced Pydantic Models for Structured Sessions
+class CombatEncounter(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    description: str
+    enemies: str = ""
+    outcome: str = ""
+    notable_events: str = ""
+
+class RoleplayEncounter(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    description: str
+    npcs_involved: List[str] = Field(default_factory=list)
+    outcome: str = ""
+    importance: str = ""
+
+class LootItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    item_name: str
+    description: str = ""
+    value: str = ""
+    recipient: str = ""
+
+class OverarchingMission(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    mission_name: str
+    status: str = "In Progress"  # In Progress, Completed, Failed, On Hold
+    description: str = ""
+    notes: str = ""
+
+class NPCMention(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    npc_name: str
+    role: str = ""
+    notes: str = ""
+    first_encounter: bool = False
+
+class SessionStructuredData(BaseModel):
+    session_number: Optional[int] = None
+    session_date: Optional[date] = None
+    players_present: List[str] = Field(default_factory=list)
+    session_goal: str = ""
+    combat_encounters: List[CombatEncounter] = Field(default_factory=list)
+    roleplay_encounters: List[RoleplayEncounter] = Field(default_factory=list)
+    npcs_encountered: List[NPCMention] = Field(default_factory=list)
+    loot: List[LootItem] = Field(default_factory=list)
+    notes: str = ""
+    notable_roleplay_moments: List[str] = Field(default_factory=list)
+    next_session_goals: str = ""
+    overarching_missions: List[OverarchingMission] = Field(default_factory=list)
+
+class SessionCreate(BaseModel):
+    title: str
+    content: str = ""  # Free-form content for backward compatibility
+    structured_data: Optional[SessionStructuredData] = None
+    session_type: str = "free_form"  # "free_form" or "structured"
+
+class SessionUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    structured_data: Optional[SessionStructuredData] = None
+    session_type: Optional[str] = None
+
+class Session(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    content: str = ""
+    structured_data: Optional[SessionStructuredData] = None
+    session_type: str = "free_form"
+    npcs_mentioned: List[str] = Field(default_factory=list)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+# NPC Models (keeping existing structure)
 class NPCCreate(BaseModel):
     name: str
     status: str = "Unknown"
@@ -77,22 +149,6 @@ class NPC(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-class SessionCreate(BaseModel):
-    title: str
-    content: str = ""
-
-class SessionUpdate(BaseModel):
-    title: Optional[str] = None
-    content: Optional[str] = None
-
-class Session(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    title: str
-    content: str = ""
-    npcs_mentioned: List[str] = Field(default_factory=list)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-    updated_at: datetime = Field(default_factory=datetime.utcnow)
-
 class NPCExtraction(BaseModel):
     session_id: str
     extracted_text: str
@@ -116,14 +172,9 @@ class OllamaLLMService:
         """
         if self.enabled:
             # TODO: Implement actual Ollama API call
-            # response = await ollama_client.chat(
-            #     model="llama2", 
-            #     messages=[{"role": "user", "content": f"Extract NPC names from: {text}"}]
-            # )
             pass
         
         # Simple rule-based extraction for now
-        # Look for capitalized names that might be NPCs
         patterns = [
             r'\b([A-Z][a-z]+ (?:the )?[A-Z][a-z]+)\b',  # "Thorin the Blacksmith"
             r'\b([A-Z][a-z]+ [A-Z][a-z]+)\b',           # "John Smith"
@@ -207,7 +258,37 @@ async def delete_session(session_id: str, username: str = Depends(authenticate))
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session deleted successfully"}
 
-# NPC routes
+# Session template route
+@api_router.get("/sessions/template/structured")
+async def get_structured_template(username: str = Depends(authenticate)):
+    """Return an empty structured session template"""
+    template = SessionStructuredData()
+    return template
+
+# Export session route
+@api_router.get("/sessions/{session_id}/export")
+async def export_session(session_id: str, username: str = Depends(authenticate)):
+    """Export session data in a formatted structure"""
+    session = await db.sessions.find_one({"id": session_id})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    session_obj = Session(**session)
+    
+    # Create formatted export data
+    export_data = {
+        "session_info": {
+            "title": session_obj.title,
+            "created_at": session_obj.created_at.isoformat(),
+            "session_type": session_obj.session_type
+        },
+        "content": session_obj.content,
+        "structured_data": session_obj.structured_data.dict() if session_obj.structured_data else None
+    }
+    
+    return export_data
+
+# NPC routes (keeping existing)
 @api_router.post("/npcs", response_model=NPC)
 async def create_npc(npc_data: NPCCreate, username: str = Depends(authenticate)):
     npc_dict = npc_data.dict()

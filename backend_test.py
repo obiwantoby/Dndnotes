@@ -221,6 +221,199 @@ class DDNoteAPITester:
             return self.log_test("Delete Session", True, f"- {data.get('message')}")
         return self.log_test("Delete Session", False, f"- Response: {data}")
 
+    def test_structured_session_template(self):
+        """Test getting structured session template"""
+        success, data = self.make_request('GET', 'sessions/template/structured')
+        if success and isinstance(data, dict):
+            # Check if template has expected structured fields
+            expected_fields = ['session_number', 'session_date', 'players_present', 'session_goal', 
+                             'combat_encounters', 'roleplay_encounters', 'npcs_encountered', 
+                             'loot', 'notes', 'notable_roleplay_moments', 'next_session_goals', 
+                             'overarching_missions']
+            has_all_fields = all(field in data for field in expected_fields)
+            return self.log_test("Get Structured Template", has_all_fields, f"- Fields present: {has_all_fields}")
+        return self.log_test("Get Structured Template", False, f"- Response: {data}")
+
+    def test_create_structured_session(self):
+        """Test creating a structured session with comprehensive data"""
+        structured_data = {
+            "session_number": 5,
+            "session_date": "2024-02-15",
+            "players_present": ["Alice", "Bob", "Charlie", "Diana"],
+            "session_goal": "Infiltrate the goblin stronghold and rescue the captured villagers",
+            "combat_encounters": [
+                {
+                    "id": "combat1",
+                    "description": "Ambush by goblin scouts at the forest entrance",
+                    "enemies": "3 Goblin Scouts, 1 Hobgoblin",
+                    "outcome": "Victory - party defeated all enemies",
+                    "notable_events": "Charlie used clever tactics to flank the hobgoblin"
+                },
+                {
+                    "id": "combat2", 
+                    "description": "Final battle in the stronghold throne room",
+                    "enemies": "Goblin King, 2 Elite Guards",
+                    "outcome": "Victory after intense battle",
+                    "notable_events": "Alice's critical hit finished the Goblin King"
+                }
+            ],
+            "roleplay_encounters": [
+                {
+                    "id": "rp1",
+                    "description": "Negotiation with captured goblin for information",
+                    "npcs_involved": ["Grax the Goblin"],
+                    "outcome": "Successfully extracted stronghold layout",
+                    "importance": "Critical intelligence for mission success"
+                }
+            ],
+            "npcs_encountered": [
+                {
+                    "id": "npc1",
+                    "npc_name": "Grax the Goblin",
+                    "role": "Captured scout",
+                    "notes": "Provided valuable intel about stronghold defenses",
+                    "first_encounter": True
+                },
+                {
+                    "id": "npc2",
+                    "npc_name": "Elder Marta",
+                    "role": "Village elder",
+                    "notes": "Thanked party for rescue mission",
+                    "first_encounter": False
+                }
+            ],
+            "loot": [
+                {
+                    "id": "loot1",
+                    "item_name": "Goblin King's Crown",
+                    "description": "Ornate crown with embedded gems",
+                    "value": "500 gp",
+                    "recipient": "Party treasury"
+                },
+                {
+                    "id": "loot2",
+                    "item_name": "+1 Shortsword",
+                    "description": "Magical blade with goblin runes",
+                    "value": "300 gp",
+                    "recipient": "Bob"
+                }
+            ],
+            "notes": "Excellent teamwork displayed. Party worked well together and showed good tactical thinking.",
+            "notable_roleplay_moments": [
+                "Charlie's inspiring speech before the final battle",
+                "Diana's compassionate healing of wounded villagers",
+                "Bob's humorous interaction with the goblin prisoner"
+            ],
+            "next_session_goals": "Return to town, collect reward, and investigate rumors of dragon sightings",
+            "overarching_missions": [
+                {
+                    "id": "mission1",
+                    "mission_name": "Rescue the Villagers",
+                    "status": "Completed",
+                    "description": "Save captured villagers from goblin stronghold",
+                    "notes": "Successfully completed with no casualties"
+                },
+                {
+                    "id": "mission2",
+                    "mission_name": "Investigate Dragon Threat",
+                    "status": "In Progress", 
+                    "description": "Look into reports of dragon activity near the mountains",
+                    "notes": "Next major quest line to pursue"
+                }
+            ]
+        }
+        
+        session_data = {
+            "title": "Session 5: The Goblin Stronghold",
+            "session_type": "structured",
+            "structured_data": structured_data
+        }
+        
+        success, data = self.make_request('POST', 'sessions', session_data, 200)
+        if success and 'id' in data:
+            self.structured_session_id = data['id']
+            # Verify structured data was saved correctly
+            session_type_correct = data.get('session_type') == 'structured'
+            has_structured_data = data.get('structured_data') is not None
+            return self.log_test("Create Structured Session", session_type_correct and has_structured_data, 
+                               f"- ID: {self.structured_session_id}, Type: {data.get('session_type')}")
+        return self.log_test("Create Structured Session", False, f"- Response: {data}")
+
+    def test_export_structured_session(self):
+        """Test exporting structured session data"""
+        if not hasattr(self, 'structured_session_id') or not self.structured_session_id:
+            return self.log_test("Export Structured Session", False, "- No structured session ID available")
+        
+        success, data = self.make_request('GET', f'sessions/{self.structured_session_id}/export')
+        if success and 'session_info' in data and 'structured_data' in data:
+            session_info = data.get('session_info', {})
+            structured_data = data.get('structured_data', {})
+            
+            # Verify export contains expected sections
+            has_session_info = 'title' in session_info and 'session_type' in session_info
+            has_structured_sections = all(section in structured_data for section in 
+                                        ['session_number', 'combat_encounters', 'loot', 'overarching_missions'])
+            
+            return self.log_test("Export Structured Session", has_session_info and has_structured_sections,
+                               f"- Export format valid, Type: {session_info.get('session_type')}")
+        return self.log_test("Export Structured Session", False, f"- Response: {data}")
+
+    def test_mixed_session_types(self):
+        """Test that both structured and free-form sessions can coexist"""
+        # Create a free-form session
+        free_form_data = {
+            "title": "Free Form Session: Quick Notes",
+            "content": "Party met some NPCs and had adventures. Thorin helped with equipment.",
+            "session_type": "free_form"
+        }
+        
+        success1, data1 = self.make_request('POST', 'sessions', free_form_data, 200)
+        
+        # Get all sessions and verify both types exist
+        success2, data2 = self.make_request('GET', 'sessions')
+        
+        if success1 and success2 and isinstance(data2, list):
+            session_types = [session.get('session_type') for session in data2]
+            has_structured = 'structured' in session_types
+            has_free_form = 'free_form' in session_types
+            
+            # Clean up the free-form session
+            if 'id' in data1:
+                self.make_request('DELETE', f'sessions/{data1["id"]}', expected_status=200)
+            
+            return self.log_test("Mixed Session Types", has_structured and has_free_form,
+                               f"- Types found: {set(session_types)}")
+        return self.log_test("Mixed Session Types", False, f"- Response: {data2}")
+
+    def test_structured_session_validation(self):
+        """Test structured session data validation and edge cases"""
+        # Test with minimal structured data
+        minimal_data = {
+            "title": "Minimal Structured Session",
+            "session_type": "structured",
+            "structured_data": {
+                "session_number": 1,
+                "players_present": ["Player1"],
+                "session_goal": "Test minimal data"
+            }
+        }
+        
+        success, data = self.make_request('POST', 'sessions', minimal_data, 200)
+        if success and 'id' in data:
+            # Clean up
+            self.make_request('DELETE', f'sessions/{data["id"]}', expected_status=200)
+            return self.log_test("Structured Session Validation", True, "- Minimal data accepted")
+        return self.log_test("Structured Session Validation", False, f"- Response: {data}")
+
+    def cleanup_structured_session(self):
+        """Clean up the structured session created for testing"""
+        if hasattr(self, 'structured_session_id') and self.structured_session_id:
+            success, data = self.make_request('DELETE', f'sessions/{self.structured_session_id}', expected_status=200)
+            if success:
+                return self.log_test("Cleanup Structured Session", True, "- Session deleted")
+            return self.log_test("Cleanup Structured Session", False, f"- Response: {data}")
+        return self.log_test("Cleanup Structured Session", True, "- No session to clean up")
+
     def run_all_tests(self):
         """Run all API tests in sequence"""
         print("🚀 Starting D&D Note-Taking API Tests")

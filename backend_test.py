@@ -425,11 +425,19 @@ class DDNoteAPITester:
         self.test_auth_check()
         self.test_auth_failure()
 
-        # Session CRUD tests
+        # Session CRUD tests (free-form)
         self.test_create_session()
         self.test_get_sessions()
         self.test_get_session_by_id()
         self.test_update_session()
+
+        # NEW: Structured Session Template Tests
+        print("\n🆕 Testing New Structured Session Features:")
+        self.test_structured_session_template()
+        self.test_create_structured_session()
+        self.test_export_structured_session()
+        self.test_mixed_session_types()
+        self.test_structured_session_validation()
 
         # NPC CRUD tests
         self.test_create_npc()
@@ -444,6 +452,7 @@ class DDNoteAPITester:
         # Cleanup tests
         self.test_delete_npc()
         self.test_delete_session()
+        self.cleanup_structured_session()
 
         # Print summary
         print("=" * 60)
